@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul
-title ASM Gider Takip - Başlatıcı
+title ASM Gider Takip - Baslatici
 
 echo ==========================================
 echo ASM Gider Takip Sistemine Hos Geldiniz
 echo ==========================================
 echo.
 
-:: Node.js kontrolü
+:: Node.js kontrolu
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
     echo HATA: Node.js bilgisayarinizda kurulu degil!
@@ -34,20 +34,11 @@ cd ..
 
 echo.
 echo [4/4] Sistem baslatiliyor... 
-echo Lutfen acilan pencereleri sistemi kullanirken KAPATMAYIN!
+echo Lutfen bu pencereyi sistemi kullanirken KAPATMAYIN! Cikmak icin CTRL+C tuslarina basabilirsiniz.
 echo.
 
-:: Backend'i ayri bir komut penceresinde baslatir
-start "ASM Gider Takip - Backend (Sunucu)" cmd /c "title ASM Gider Takip - Backend Sunucusu && color 0A && cd backend && npm run dev"
+:: Tarayicida projeyi acmak icin 4 saniye bekleyip baslatan bir komut arka planda calistirilir
+start /b cmd /c "timeout /t 4 >nul && start http://localhost:5173"
 
-:: Sunucunun acilmasi icin 4 saniye bekle
-timeout /t 4 >nul
-
-:: Tarayicida projeyi ac
-start http://localhost:5173
-
-:: Frontend'i (on yuz) mevcut pencerede baslatir
-title ASM Gider Takip - Frontend Sunucusu
-color 0B
-cd frontend
-npm run dev
+:: Backend ve Frontend'i ayni pencerede eszamanli (concurrently) baslatir
+call npx --yes concurrently -k -n "Backend,Frontend" -c "green,blue" "cd backend && npm run dev" "cd frontend && npm run dev"
