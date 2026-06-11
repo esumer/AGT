@@ -7,38 +7,41 @@ echo ASM Gider Takip Sistemine Hos Geldiniz
 echo ==========================================
 echo.
 
-:: Node.js kontrolu
+REM Control Node.js
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
     echo HATA: Node.js bilgisayarinizda kurulu degil!
-    echo Sistemi calistirmak icin lutfen https://nodejs.org adresinden Node.js'i indirip kurun.
+    echo Sistemi calistirmak icin lutfen https://nodejs.org/tr/download adresinden Node.js'i indirip kurun.
     pause
     exit /b
 )
 
-echo [1/4] Arka yuz (Backend) paketleri kontrol ediliyor ve yukleniyor...
+echo [1/4] Arka yuz (Backend) paketleri yukleniyor...
 cd backend
-call npm install
+if not exist uploads mkdir uploads
+call npm install --no-audit --no-fund --loglevel=error >nul 2>&1
 
 echo.
 echo [2/4] Veritabani ayarlari yapilandiriliyor...
-call npx prisma db push
-call npx prisma generate
+call npx prisma db push >nul 2>&1
+call npx prisma generate >nul 2>&1
 cd ..
 
 echo.
-echo [3/4] On yuz (Frontend) paketleri kontrol ediliyor ve yukleniyor...
+echo [3/4] On yuz (Frontend) paketleri yukleniyor...
 cd frontend
-call npm install
+call npm install --no-audit --no-fund --loglevel=error >nul 2>&1
 cd ..
 
 echo.
 echo [4/4] Sistem baslatiliyor... 
-echo Lutfen bu pencereyi sistemi kullanirken KAPATMAYIN! Cikmak icin CTRL+C tuslarina basabilirsiniz.
+echo +--------------------------------------------------+
+echo :                                                  :
+echo :     LUTFEN BU PENCEREYI SISTEMI KULLANIRKEN      :
+echo :                  KAPATMAYIN!                     :
+echo :                                                  :
+echo +--------------------------------------------------+
 echo.
 
-:: Tarayicida projeyi acmak icin 4 saniye bekleyip baslatan bir komut arka planda calistirilir
-start /b cmd /c "timeout /t 4 >nul && start http://localhost:5173"
-
-:: Backend ve Frontend'i ayni pencerede eszamanli (concurrently) baslatir
-call npx --yes concurrently -k -n "Backend,Frontend" -c "green,blue" "cd backend && npm run dev" "cd frontend && npm run dev"
+REM Start Backend and Frontend concurrently
+call npx --yes concurrently -k -n "Backend,Frontend" -c "green,blue" "cd backend && npm run dev" "cd frontend && node run-dev.cjs"
