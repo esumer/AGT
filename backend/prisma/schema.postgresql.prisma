@@ -1,0 +1,68 @@
+﻿// PostgreSQL şeması — Senaryo 3 (Supabase Bulut)
+// DATABASE_URL="postgresql://postgres.[ref]:[pass]@...pooler.supabase.com:6543/postgres?pgbouncer=true"
+// DIRECT_URL="postgresql://postgres.[ref]:[pass]@db.[ref].supabase.co:5432/postgres"
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  title     String   @default("DOKTOR")
+  role      String   @default("USER")
+  isPartner Boolean  @default(true)
+  startDate DateTime @default(now())
+  createdAt DateTime @default(now())
+  
+  expenses    Expense[]
+  exemptions  ExpenseExemption[] @relation("UserExemptions")
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String
+  parentId  Int?
+  order     Int       @default(0)
+  parent    Category?  @relation("SubCategories", fields: [parentId], references: [id])
+  children  Category[] @relation("SubCategories")
+  expenses  Expense[]
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  amount      Float
+  date        DateTime @default(now())
+  periodStart DateTime?
+  periodEnd   DateTime?
+  description String?
+  receiptUrl  String?
+  recurringGroupId String?
+  
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id])
+
+  createdAt   DateTime @default(now())
+
+  exemptions  ExpenseExemption[]
+}
+
+model ExpenseExemption {
+  id        Int     @id @default(autoincrement())
+  expenseId Int
+  userId    Int
+  
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user      User    @relation("UserExemptions", fields: [userId], references: [id], onDelete: Cascade)
+}

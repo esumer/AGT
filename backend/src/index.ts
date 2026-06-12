@@ -144,6 +144,187 @@ app.post('/api/admin/lan-enable', authenticateToken, async (req: any, res: any) 
   });
 });
 
+// ============================================================
+// VERİTABANI SENARYO YÖNETİMİ (Ayarlar Paneli)
+// ============================================================
+
+// Mevcut veritabanı yapılandırmasını döndürür
+app.get('/api/admin/db-config', authenticateToken, (req: any, res: any) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Yetkisiz.' });
+
+  const dbUrl = process.env.DATABASE_URL || '';
+  const provider = (dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://'))
+    ? 'postgresql'
+    : 'sqlite';
+
+  // URL'deki şifreyi maskele
+  let displayUrl = dbUrl;
+  if (provider === 'postgresql') {
+    try {
+      const url = new URL(dbUrl);
+      url.password = '***';
+      displayUrl = url.toString();
+    } catch {}
+  }
+
+  res.json({ provider, displayUrl });
+});
+
+// Yeni veritabanı bağlantısını test eder (bağlantı açılıp kapanır, veri değişmez)
+app.post('/api/admin/db-config/test', authenticateToken, async (req: any, res: any) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Yetkisiz.' });
+
+  const { targetUrl, direction } = req.body;
+  if (!targetUrl) return res.status(400).json({ error: 'Bağlantı URL\'si gerekli.' });
+
+  const { exec } = require('child_process');
+  const fs = require('fs');
+  const backendDir = path.join(__dirname, '..');
+  const prismaDir = path.join(backendDir, 'prisma');
+
+  // Test için geçici env değişkeni ile prisma validate çalıştır
+  const schemaFile = direction === 'to-postgresql'
+    ? path.join(prismaDir, 'schema.postgresql.prisma')
+    : path.join(prismaDir, 'schema.sqlite.prisma');
+
+  const env = {
+    ...process.env,
+    DATABASE_URL: targetUrl,
+    DIRECT_URL: req.body.directUrl || targetUrl,
+  };
+
+  const cmd = `npx prisma db execute --stdin --schema="${schemaFile}"`;
+  const testQuery = direction === 'to-postgresql' ? 'SELECT 1;' : 'SELECT 1;';
+
+  exec(cmd, { cwd: backendDir, env, input: testQuery, timeout: 15000 }, (error: any, stdout: any, stderr: any) => {
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Bağlantı kurulamadı. URL\'yi kontrol edin.',
+        detail: stderr?.substring(0, 300) || error.message
+      });
+    }
+    res.json({ success: true, message: 'Bağlantı başarılı!' });
+  });
+});
+
+// Tam geçiş: Veri dışa aktar → Şema güncelle → Veri içe aktar
+// SSE (Server-Sent Events) ile ilerlemeyi gerçek zamanlı akıtır
+app.post('/api/admin/db-migrate', authenticateToken, async (req: any, res: any) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Yetkisiz.' });
+
+  const { targetUrl, directUrl, direction } = req.body;
+  if (!targetUrl) return res.status(400).json({ error: 'Hedef URL gerekli.' });
+
+  // SSE başlıkları
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const send = (msg: string, type: 'log' | 'done' | 'error' = 'log') => {
+    res.write(`data: ${JSON.stringify({ type, msg })}\n\n`);
+  };
+
+  const { exec } = require('child_process');
+  const fs = require('fs');
+
+  const backendDir = path.join(__dirname, '..');
+  const prismaDir  = path.join(backendDir, 'prisma');
+  const dataFile   = path.join(backendDir, 'migration-data.json');
+  const insertScript = path.join(backendDir, 'migration-insert.js');
+
+  const runCmd = (cmd: string, env?: any): Promise<string> =>
+    new Promise((resolve, reject) => {
+      exec(cmd, { cwd: backendDir, env: env || process.env, timeout: 120000 },
+        (err: any, stdout: string, stderr: string) => {
+          if (err) reject(new Error(stderr?.slice(0, 400) || err.message));
+          else resolve(stdout);
+        }
+      );
+    });
+
+  function updateEnv(url: string, direct: string, provider: string) {
+    const envPath = path.join(backendDir, '.env');
+    let content = fs.readFileSync(envPath, 'utf8');
+    const set = (key: string, val: string) => {
+      const re = new RegExp(`^${key}=.*`, 'm');
+      const line = `${key}="${val}"`;
+      return re.test(content) ? content.replace(re, line) : content + `\n${line}`;
+    };
+    content = set('DATABASE_URL', url);
+    content = set('DIRECT_URL', direct || '');
+    content = set('DB_PROVIDER', provider);
+    fs.writeFileSync(envPath, content, 'utf8');
+  }
+
+  try {
+    // ADIM 1: Mevcut verileri oku
+    send('📦 Mevcut veriler okunuyor...');
+    const [users, categories, expenses, exemptions] = await Promise.all([
+      prisma.user.findMany(),
+      prisma.category.findMany(),
+      prisma.expense.findMany(),
+      prisma.expenseExemption.findMany(),
+    ]);
+    fs.writeFileSync(dataFile, JSON.stringify({ users, categories, expenses, exemptions }, null, 2), 'utf8');
+    send(`✅ ${users.length} kullanıcı, ${categories.length} kategori, ${expenses.length} gider dışa aktarıldı`);
+
+    // ADIM 2: Uygun Prisma şemasını kopyala
+    send('📝 Veritabanı şeması seçiliyor...');
+    const srcSchema = direction === 'to-postgresql'
+      ? path.join(prismaDir, 'schema.postgresql.prisma')
+      : path.join(prismaDir, 'schema.sqlite.prisma');
+    fs.copyFileSync(srcSchema, path.join(prismaDir, 'schema.prisma'));
+    send(`✅ Şema güncellendi (${direction === 'to-postgresql' ? 'PostgreSQL' : 'SQLite'})`);
+
+    // ADIM 3: .env güncelle
+    send('⚙️ Yapılandırma dosyası güncelleniyor...');
+    const provider = direction === 'to-postgresql' ? 'postgresql' : 'sqlite';
+    updateEnv(targetUrl, directUrl || '', provider);
+    send('✅ .env dosyası güncellendi');
+
+    // ADIM 4: Prisma istemcisi oluştur
+    send('🔄 Prisma istemcisi yeniden oluşturuluyor...');
+    const genEnv = { ...process.env, DATABASE_URL: targetUrl, DIRECT_URL: directUrl || targetUrl };
+    await runCmd('npx prisma generate', genEnv);
+    send('✅ Prisma istemcisi hazır');
+
+    // ADIM 5: Yeni veritabanında tabloları oluştur
+    send('🗄️ Yeni veritabanında tablolar oluşturuluyor...');
+    await runCmd('npx prisma db push --skip-generate --accept-data-loss', genEnv);
+    send('✅ Tablolar oluşturuldu');
+
+    // ADIM 6: Verileri yeni veritabanına aktar
+    send('📥 Veriler yeni veritabanına aktarılıyor...');
+    await runCmd(`node "${insertScript}" "${dataFile}"`, genEnv);
+    send('✅ Veriler aktarıldı');
+
+    // ADIM 7: Geçici dosyayı sil
+    if (fs.existsSync(dataFile)) fs.unlinkSync(dataFile);
+
+    send('', 'done');
+    res.end();
+
+  } catch (err: any) {
+    // Hata durumunda şemayı geri al
+    try {
+      const prevSchema = direction === 'to-postgresql'
+        ? path.join(prismaDir, 'schema.sqlite.prisma')
+        : path.join(prismaDir, 'schema.postgresql.prisma');
+      if (require('fs').existsSync(prevSchema)) {
+        require('fs').copyFileSync(prevSchema, path.join(prismaDir, 'schema.prisma'));
+      }
+    } catch {}
+    if (require('fs').existsSync(dataFile)) require('fs').unlinkSync(dataFile);
+    send(`❌ HATA: ${err.message}`, 'error');
+    res.end();
+  }
+});
+
+// ============================================================
+
 app.post('/api/auth/setup', async (req: any, res: any) => {
   const { name, email, password, title } = req.body;
   const count = await prisma.user.count();
