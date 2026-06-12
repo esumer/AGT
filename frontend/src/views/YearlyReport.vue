@@ -77,6 +77,33 @@ const displayedColumns = computed(() => {
   }
 })
 
+// Kategorileri hiyerarşik (üst-alt ilişkisi ve order sırasına göre) sırala
+const orderedCategories = computed(() => {
+  const list: any[] = []
+  
+  const parents = categories.value
+    .filter((c: any) => !c.parentId)
+    .sort((a: any, b: any) => a.order - b.order)
+    
+  parents.forEach((parent: any) => {
+    list.push(parent)
+    
+    const children = categories.value
+      .filter((c: any) => c.parentId === parent.id)
+      .sort((a: any, b: any) => a.order - b.order)
+      
+    list.push(...children)
+  })
+  
+  const orphans = categories.value.filter((c: any) => {
+    if (!c.parentId) return false
+    return !parents.some((p: any) => p.id === c.parentId)
+  })
+  list.push(...orphans)
+  
+  return list
+})
+
 // Gider Kalemleri Matrix
 const categoryMatrix = computed(() => {
   const colsLength = displayedColumns.value.length || 1
@@ -198,8 +225,10 @@ const formatCurrency = (val: number) => {
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-            <tr v-for="cat in categories" :key="cat.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-              <td class="px-4 py-3 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+            <tr v-for="cat in orderedCategories" :key="cat.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <td class="px-4 py-3 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300"
+                  :class="cat.parentId ? 'pl-8 text-slate-500 dark:text-slate-400 font-normal text-xs' : 'font-bold text-slate-800 dark:text-slate-100'">
+                <span v-if="cat.parentId" class="text-slate-400 mr-1.5">↳</span>
                 {{ cat.name }}
               </td>
               <td v-for="(val, idx) in categoryMatrix[cat.id]" :key="idx" class="px-4 py-3 text-right" :class="val > 0 ? 'text-slate-700 dark:text-slate-300 font-medium' : 'text-slate-300 dark:text-slate-600'">
