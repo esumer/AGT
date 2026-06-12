@@ -1,52 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { PlusCircle, Receipt, Trash2, CalendarDays } from 'lucide-vue-next'
+import { ref, onMounted } from 'vue'
+import { Receipt, CalendarDays, Trash2 } from 'lucide-vue-next'
 import { authState } from '../auth'
 import { useToast } from '../composables/useToast'
+import { apiUrl } from '../api'
 
 const { success, error: toastError } = useToast()
-const expenses = ref([])
-const users = ref([])
-const categories = ref([])
-
-const newExpense = ref({
-  amount: '',
-  description: '',
-  categoryId: '',
-  date: new Date().toISOString().split('T')[0],
-  userId: authState.user?.id || '',
-  exemptUserIds: [] as number[],
-  isPeriodic: false,
-  periodStart: '',
-  periodEnd: '',
-  isRecurring: false,
-  recurringInterval: 'MONTHLY',
-  recurringEndDate: ''
-})
-
-const receiptFile = ref<File | null>(null)
-
-const isAdminOrSec = computed(() => authState.user?.role === 'ADMIN' || authState.user?.role === 'SECRETARY')
-
-const isAdvancedModalOpen = ref(false)
+const expenses = ref<any[]>([])
 
 const fetchInitialData = async () => {
   const headers = { 'Authorization': `Bearer ${authState.token}` }
-  const [expRes, userRes, catRes] = await Promise.all([
-    fetch('http://localhost:3000/api/expenses', { headers }),
-    fetch('http://localhost:3000/api/users', { headers }),
-    fetch('http://localhost:3000/api/categories', { headers })
-  ])
-  
+  const expRes = await fetch(apiUrl('/api/expenses'), { headers })
   if (expRes.ok) expenses.value = await expRes.json()
-  if (userRes.ok) users.value = await userRes.json()
-  if (catRes.ok) categories.value = await catRes.json()
 }
 
-
-
 const deleteExpense = async (expense: any) => {
-  let url = `http://localhost:3000/api/expenses/${expense.id}`;
+  let url = apiUrl(`/api/expenses/${expense.id}`);
   
   if (expense.recurringGroupId) {
     const deleteAll = confirm('Bu Gider TEKRARLAYAN bir Gider grubunun parçası. Sadece bunu mu, yoksa bu tarihten sonraki tüm tekrarlarını mı silmek istersin?\n\nTAMAM: İleriye dönük tüm tekrarları sil.\nİPTAL: Sadece bu Giderı sil.');
@@ -64,8 +33,7 @@ const deleteExpense = async (expense: any) => {
 
   if (res.ok) {
     success('Gider silindi');
-    // Listeyi yenile
-    const expRes = await fetch('http://localhost:3000/api/expenses', {
+    const expRes = await fetch(apiUrl('/api/expenses'), {
       headers: { 'Authorization': `Bearer ${authState.token}` }
     })
     expenses.value = await expRes.json()
@@ -74,16 +42,8 @@ const deleteExpense = async (expense: any) => {
   }
 }
 
-const totalExpense = computed(() => {
-  return expenses.value.reduce((total, exp: any) => total + exp.amount, 0)
-})
-
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(val)
-}
-
-const formatDate = (dateStr: string) => {
-  return new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(dateStr))
 }
 
 onMounted(() => {
@@ -114,6 +74,7 @@ onMounted(() => {
               <th class="px-6 py-4">Kişi</th>
               <th class="px-6 py-4">Belge</th>
               <th class="px-6 py-4 text-right">Tutar</th>
+              <th class="px-6 py-4 text-center">İşlem</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
@@ -134,17 +95,22 @@ onMounted(() => {
                 <span v-else class="text-slate-800 dark:text-slate-200">{{ expense.user.name }}</span>
               </td>
               <td class="px-6 py-4">
-                <a v-if="expense.receiptUrl" :href="'http://localhost:3000' + expense.receiptUrl" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors" title="Faturayı Görüntüle">
+                <a v-if="expense.receiptUrl" :href="apiUrl(expense.receiptUrl)" target="_blank" class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors" title="Faturayı Görüntüle">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                   </svg>
                 </a>
                 <span v-else class="text-slate-400 dark:text-slate-600 text-xs">-</span>
               </td>
-              <td class="px-6 py-4 text-sm font-bold text-emerald-600 dark:text-emerald-400 text-right">{{ formatCurrency(exp.amount) }}</td>
+              <td class="px-6 py-4 text-sm font-bold text-emerald-600 dark:text-emerald-400 text-right">{{ formatCurrency(expense.amount) }}</td>
+              <td class="px-6 py-4 text-center">
+                <button @click="deleteExpense(expense)" class="inline-flex items-center justify-center w-8 h-8 rounded-full text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors" title="Gideri Sil">
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </td>
             </tr>
             <tr v-if="expenses.length === 0">
-              <td colspan="6" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
+              <td colspan="7" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">
                 <Receipt class="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
                 <p>Henüz Gider kaydı bulunmuyor.</p>
               </td>

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { PlusCircle, Receipt, Trash2, CalendarDays } from 'lucide-vue-next'
+import { PlusCircle } from 'lucide-vue-next'
 import { authState } from '../auth'
 import { useToast } from '../composables/useToast'
+import { apiUrl } from '../api'
 
 const { success, error: toastError } = useToast()
-const expenses = ref([])
-const users = ref([])
-const categories = ref([])
+const expenses = ref<any[]>([])
+const users = ref<any[]>([])
+const categories = ref<any[]>([])
 
 const newExpense = ref({
   amount: '',
@@ -24,8 +25,6 @@ const newExpense = ref({
   recurringEndDate: ''
 })
 
-const receiptFile = ref<File | null>(null)
-
 const isAdminOrSec = computed(() => authState.user?.role === 'ADMIN' || authState.user?.role === 'SECRETARY')
 
 const isAdvancedModalOpen = ref(false)
@@ -33,9 +32,9 @@ const isAdvancedModalOpen = ref(false)
 const fetchInitialData = async () => {
   const headers = { 'Authorization': `Bearer ${authState.token}` }
   const [expRes, userRes, catRes] = await Promise.all([
-    fetch('http://localhost:3000/api/expenses', { headers }),
-    fetch('http://localhost:3000/api/users', { headers }),
-    fetch('http://localhost:3000/api/categories', { headers })
+    fetch(apiUrl('/api/expenses'), { headers }),
+    fetch(apiUrl('/api/users'), { headers }),
+    fetch(apiUrl('/api/categories'), { headers })
   ])
   
   if (expRes.ok) expenses.value = await expRes.json()
@@ -51,38 +50,12 @@ const addExpense = async () => {
     return toastError('Dönemsel Giderlar için başlangıç ve bitiş tarihi girilmelidir.')
   }
   
-  let receiptUrl = null;
-
-  // Önce fotoğrafı yükle
-  if (receiptFile.value) {
-    const formData = new FormData()
-    formData.append('receipt', receiptFile.value)
-    try {
-      const uploadRes = await fetch('http://localhost:3000/api/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${authState.token}` },
-        body: formData
-      })
-      if (uploadRes.ok) {
-        const uploadData = await uploadRes.json()
-        receiptUrl = uploadData.url
-      } else {
-        toastError("Fatura fotoğrafı yüklenemedi!")
-        return
-      }
-    } catch (e) {
-      toastError("Yükleme sırasında hata oluştu!")
-      return
-    }
-  }
-
   const payload = {
-    amount: newExpense.value.amount,
     ...newExpense.value,
-    receiptUrl
+    receiptUrl: null
   };
 
-  const res = await fetch('http://localhost:3000/api/expenses', {
+  const res = await fetch(apiUrl('/api/expenses'), {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
@@ -106,12 +79,9 @@ const addExpense = async () => {
       recurringInterval: 'MONTHLY',
       recurringEndDate: ''
     }
-    receiptFile.value = null
-    const fileInput = document.getElementById('receiptInput') as HTMLInputElement
-    if (fileInput) fileInput.value = ''
     
     // Sadece Giderları yenile
-    const expRes = await fetch('http://localhost:3000/api/expenses', {
+    const expRes = await fetch(apiUrl('/api/expenses'), {
       headers: { 'Authorization': `Bearer ${authState.token}` }
     })
     expenses.value = await expRes.json()
@@ -124,9 +94,7 @@ const addExpense = async () => {
   }
 }
 
-const formatCurrency = (val: number) => {
-  return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(val)
-}
+
 
 onMounted(() => {
   fetchInitialData()
@@ -179,15 +147,11 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- 2. Satır: Açıklama ve Dosya Yükleme (2 Sütun) -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div class="md:col-span-2">
+          <!-- 2. Satır: Açıklama (Tam Genişlik) -->
+          <div class="grid grid-cols-1 gap-4 mb-4">
+            <div>
               <label class="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Açıklama <span class="text-xs font-normal text-slate-400 ml-1">(İsteğe Bağlı)</span></label>
               <input v-model="newExpense.description" type="text" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none text-slate-800 dark:text-slate-100 transition-colors" placeholder="Fatura detayı vb...">
-            </div>
-            <div>
-              <label class="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Fatura / Fiş Yükle</label>
-              <input type="file" id="receiptInput" @change="e => receiptFile = (e.target as HTMLInputElement).files?.[0] || null" accept="image/*,.pdf" class="block w-full text-sm text-slate-500 dark:text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400 transition-colors cursor-pointer border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 px-2 py-1"/>
             </div>
           </div>
 

@@ -9,3 +9,14 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# ASM Gider Takip ek ignore kuralları
+logs/
+backend/uploads/*
+!backend/uploads/.gitkeep
+tools/nssm.exe
+
+# Frontend env (production değerleri içerebilir)
+frontend/.env.production
+# .env.development paylaşılabilir (localhost'ta çalışır)
+!frontend/.env.development

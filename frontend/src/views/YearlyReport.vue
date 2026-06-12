@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { CalendarDays, Download } from 'lucide-vue-next'
 import { authState } from '../auth'
+import { apiUrl } from '../api'
 
 const filterType = ref('YEAR') // 'YEAR' | 'RANGE'
 const currentYear = ref(new Date().getFullYear())
@@ -16,8 +17,8 @@ const users = ref<any[]>([])
 const fetchInitialData = async () => {
   const headers = { 'Authorization': `Bearer ${authState.token}` }
   const [catRes, userRes] = await Promise.all([
-    fetch('http://localhost:3000/api/categories', { headers }),
-    fetch('http://localhost:3000/api/users', { headers })
+    fetch(apiUrl('/api/categories'), { headers }),
+    fetch(apiUrl('/api/users'), { headers })
   ])
   if (catRes.ok) categories.value = await catRes.json()
   if (userRes.ok) users.value = await userRes.json()
@@ -30,7 +31,7 @@ const fetchInitialData = async () => {
 }
 
 const fetchExpenses = async () => {
-  let url = `http://localhost:3000/api/expenses`
+  let url = apiUrl('/api/expenses')
   if (filterType.value === 'YEAR') {
     url += `?year=${currentYear.value}`
   } else {

@@ -2,6 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { Calculator, Wallet, ArrowRightLeft, User, CalendarDays } from 'lucide-vue-next'
 import { authState } from '../auth'
+import { apiUrl } from '../api'
 
 const currentMonth = ref(new Date().getMonth() + 1)
 const currentYear = ref(new Date().getFullYear())
@@ -19,7 +20,7 @@ const months = [
 const fetchReport = async () => {
   errorMsg.value = ''
   try {
-    const res = await fetch(`http://localhost:3000/api/reports?month=${currentMonth.value}&year=${currentYear.value}`, {
+    const res = await fetch(apiUrl(`/api/reports?month=${currentMonth.value}&year=${currentYear.value}`), {
       headers: { 'Authorization': `Bearer ${authState.token}` }
     })
     

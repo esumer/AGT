@@ -1,47 +1,79 @@
 @echo off
-chcp 65001 >nul
-title ASM Gider Takip - Baslatici
+title ASM Gider Takip
 
+echo.
 echo ==========================================
-echo ASM Gider Takip Sistemine Hos Geldiniz
+echo   ASM Gider Takip - Baslatiliyor
 echo ==========================================
 echo.
 
-REM Control Node.js
-node -v >nul 2>&1
+REM Node.js kontrolu
+where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo HATA: Node.js bilgisayarinizda kurulu degil!
-    echo Sistemi calistirmak icin lutfen https://nodejs.org/tr/download adresinden Node.js'i indirip kurun.
+    echo [HATA] Node.js bulunamadi! Lutfen once kur.bat calistirin.
     pause
-    exit /b
+    exit /b 1
 )
 
-echo [1/4] Arka yuz (Backend) paketleri yukleniyor...
-cd backend
-if not exist uploads mkdir uploads
-call npm install --no-audit --no-fund --loglevel=error >nul 2>&1
+REM Frontend build kontrolu
+if not exist "%~dp0frontend\dist\index.html" (
+    echo [UYARI] Arayuz derlenmemis. Derleniyor...
+    cd /d "%~dp0frontend"
+    call npm run build
+    if %errorlevel% neq 0 (
+        echo [HATA] Derleme basarisiz. Lutfen once kur.bat calistirin.
+        pause
+        exit /b 1
+    )
+    cd /d "%~dp0"
+    echo [OK] Derleme tamamlandi.
+)
 
-echo.
-echo [2/4] Veritabani ayarlari yapilandiriliyor...
+REM Port 3000 kontrolu - zaten kullanimda mi?
+netstat -ano | findstr ":3000 " >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [UYARI] Port 3000 baska bir program tarafindan kullaniliyor.
+    echo         Program zaten calisiyor olabilir.
+    echo.
+    echo Tarayicinizda acin: http://localhost:3000
+    echo.
+    echo Eger program calismiyorsa, bilgisayari yeniden baslatip tekrar deneyin.
+    pause
+    exit /b 0
+)
+
+REM Backend klasorune gec
+cd /d "%~dp0backend"
+
+REM Veritabani guncelleme
+echo Veritabani kontrol ediliyor...
 call npx prisma db push >nul 2>&1
 call npx prisma generate >nul 2>&1
-cd ..
+echo [OK] Veritabani hazir.
 
 echo.
-echo [3/4] On yuz (Frontend) paketleri yukleniyor...
-cd frontend
-call npm install --no-audit --no-fund --loglevel=error >nul 2>&1
-cd ..
-
-echo.
-echo [4/4] Sistem baslatiliyor... 
 echo +--------------------------------------------------+
 echo :                                                  :
-echo :     LUTFEN BU PENCEREYI SISTEMI KULLANIRKEN      :
-echo :                  KAPATMAYIN!                     :
+echo :   BU PENCEREYI KAPATMAYIN!                       :
+echo :                                                  :
+echo :   Tarayicinizda acin:                            :
+echo :     http://localhost:3000                        :
 echo :                                                  :
 echo +--------------------------------------------------+
 echo.
 
-REM Start Backend and Frontend concurrently
-call npx --yes concurrently -k -n "Backend,Frontend" -c "green,blue" "cd backend && npm run dev" "cd frontend && node run-dev.cjs"
+set NODE_ENV=production
+call npm run start
+
+REM Eger buraya gelindiyse npm start hata verdi
+echo.
+echo ==========================================
+echo [HATA] Sunucu beklenmedik sekilde kapandi!
+echo ==========================================
+echo.
+echo Olasi sebepler:
+echo   - Port 3000 baska program tarafindan kullaniliyor
+echo   - backend\.env dosyasinda hata var
+echo   - node_modules eksik (kur.bat calistirin)
+echo.
+pause

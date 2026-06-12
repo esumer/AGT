@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { Receipt, Users, FolderKanban, TrendingUp } from 'lucide-vue-next'
 import { authState } from '../auth'
+import { apiUrl } from '../api'
 
 const expenses = ref([])
 const users = ref([])
@@ -10,9 +11,9 @@ const categories = ref([])
 const fetchInitialData = async () => {
   const headers = { 'Authorization': `Bearer ${authState.token}` }
   const [expRes, userRes, catRes] = await Promise.all([
-    fetch('http://localhost:3000/api/expenses', { headers }),
-    fetch('http://localhost:3000/api/users', { headers }),
-    fetch('http://localhost:3000/api/categories', { headers })
+    fetch(apiUrl('/api/expenses'), { headers }),
+    fetch(apiUrl('/api/users'), { headers }),
+    fetch(apiUrl('/api/categories'), { headers })
   ])
   
   if (expRes.ok) expenses.value = await expRes.json()

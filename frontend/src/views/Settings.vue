@@ -1,13 +1,56 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Settings2, Users, FolderKanban, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import { Users, FolderKanban, Trash2, Network, Wifi, Copy, CheckCircle2, AlertTriangle } from 'lucide-vue-next'
 import { authState } from '../auth'
 import { useToast } from '../composables/useToast'
+import { apiUrl } from '../api'
 
 const { success, error: toastError } = useToast()
 
-const users = ref([])
-const categories = ref([])
+// Ağ bilgisi
+const networkInfo = ref<{ localIP: string; lanIP: string }>({ localIP: 'localhost', lanIP: '' })
+const lanStatus = ref<'idle' | 'loading' | 'success' | 'error'>('idle')
+const lanError = ref('')
+const copied = ref(false)
+
+const fetchNetworkInfo = async () => {
+  try {
+    const res = await fetch(apiUrl('/api/auth/network-info'))
+    if (res.ok) networkInfo.value = await res.json()
+  } catch {}
+}
+
+const enableLan = async () => {
+  lanStatus.value = 'loading'
+  lanError.value = ''
+  try {
+    const res = await fetch(apiUrl('/api/admin/lan-enable'), {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authState.token}` }
+    })
+    const data = await res.json()
+    if (res.ok && data.success) {
+      networkInfo.value.lanIP = data.lanIP
+      lanStatus.value = 'success'
+      success('LAN erişimi etkinleştirildi!')
+    } else {
+      lanStatus.value = 'error'
+      lanError.value = data.error || 'Güvenlik duvarı kuralı eklenemedi.'
+    }
+  } catch {
+    lanStatus.value = 'error'
+    lanError.value = 'Sunucu ile bağlantı kurulamadı.'
+  }
+}
+
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text)
+  copied.value = true
+  setTimeout(() => copied.value = false, 2000)
+}
+
+const users = ref<any[]>([])
+const categories = ref<any[]>([])
 
 const newUser = ref({ name: '', email: '', password: '', role: 'USER', title: 'DOKTOR', isPartner: true, startDate: '' })
 const newCategory = ref({ name: '' })
@@ -15,12 +58,12 @@ const newCategory = ref({ name: '' })
 const fetchSettingsData = async () => {
   const headers = { 'Authorization': `Bearer ${authState.token}` }
   const [uRes, cRes] = await Promise.all([
-    fetch('http://localhost:3000/api/users', { headers }),
-    fetch('http://localhost:3000/api/categories', { headers })
+    fetch(apiUrl('/api/users'), { headers }),
+    fetch(apiUrl('/api/categories'), { headers })
   ])
   if (uRes.ok) {
     const rawUsers = await uRes.json()
-    users.value = rawUsers.map(u => ({
+    users.value = rawUsers.map((u: any) => ({
       ...u,
       startDate: u.startDate ? new Date(u.startDate).toISOString().split('T')[0] : ''
     }))
@@ -31,7 +74,7 @@ const fetchSettingsData = async () => {
 const addUser = async () => {
   if (!newUser.value.name || !newUser.value.email || !newUser.value.password) return toastError('Tüm alanları doldurun')
   
-  const res = await fetch('http://localhost:3000/api/users', {
+  const res = await fetch(apiUrl('/api/users'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify(newUser.value)
@@ -52,7 +95,7 @@ const updateUser = async (user: any) => {
     return;
   }
   
-  const res = await fetch(`http://localhost:3000/api/users/${user.id}`, {
+  const res = await fetch(apiUrl(`/api/users/${user.id}`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify({ role: user.role, title: user.title, isPartner: user.isPartner, startDate: user.startDate })
@@ -67,7 +110,7 @@ const updateUser = async (user: any) => {
 
 const deleteUser = async (id: number) => {
   if(!confirm('Bu kullanıcıyı silmek istediğinize emin misiniz?')) return
-  const res = await fetch(`http://localhost:3000/api/users/${id}`, {
+  const res = await fetch(apiUrl(`/api/users/${id}`), {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${authState.token}` }
   })
@@ -81,7 +124,7 @@ const deleteUser = async (id: number) => {
 
 const addCategory = async () => {
   if (!newCategory.value.name) return
-  const res = await fetch('http://localhost:3000/api/categories', {
+  const res = await fetch(apiUrl('/api/categories'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify(newCategory.value)
@@ -94,7 +137,7 @@ const addCategory = async () => {
 
 const deleteCategory = async (id: number) => {
   if(!confirm('Bu kategoriyi silmek istediğinize emin misiniz?')) return
-  const res = await fetch(`http://localhost:3000/api/categories/${id}`, {
+  const res = await fetch(apiUrl(`/api/categories/${id}`), {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${authState.token}` }
   })
@@ -103,13 +146,76 @@ const deleteCategory = async (id: number) => {
 
 onMounted(() => {
   fetchSettingsData()
+  fetchNetworkInfo()
 })
 </script>
 
 <template>
   <div class="space-y-8 max-w-5xl mx-auto transition-colors duration-300">
-    
-    <!-- Kullanıcılar Yönetimi -->
+
+    <!-- Ag ve Dagitim Ayarlari (sadece ADMIN) -->
+    <div v-if="authState.user?.role === 'ADMIN'" class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
+      <div class="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <Network class="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          Ağ & Dağıtım Ayarları
+        </h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Programı ağdaki diğer bilgisayarlara açın.</p>
+      </div>
+
+      <div class="p-6">
+        <!-- Mevcut Adresler -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div class="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Bu Bilgisayarda</p>
+            <div class="flex items-center justify-between gap-2">
+              <code class="text-sm font-bold text-slate-800 dark:text-slate-100">http://localhost:3000</code>
+              <button @click="copyToClipboard('http://localhost:3000')" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors" title="Kopyala">
+                <Copy class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div class="p-4 rounded-xl border transition-colors" :class="networkInfo.lanIP ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'">
+            <p class="text-xs font-semibold uppercase tracking-wider mb-2" :class="networkInfo.lanIP ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'">Ağdaki Diğer Bilgisayarlar</p>
+            <div v-if="networkInfo.lanIP" class="flex items-center justify-between gap-2">
+              <code class="text-sm font-bold text-slate-800 dark:text-slate-100">http://{{ networkInfo.lanIP }}:3000</code>
+              <button @click="copyToClipboard('http://' + networkInfo.lanIP + ':3000')" :class="copied ? 'text-emerald-600' : 'text-slate-500'" class="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors" title="Kopyala">
+                <CheckCircle2 v-if="copied" class="w-4 h-4" />
+                <Copy v-else class="w-4 h-4" />
+              </button>
+            </div>
+            <p v-else class="text-sm text-slate-400 dark:text-slate-500">Henüz etkinleştirilmedi</p>
+          </div>
+        </div>
+
+        <!-- LAN Etkinleştir Butonu -->
+        <div v-if="lanStatus !== 'success'">
+          <div v-if="lanStatus === 'error'" class="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl mb-4">
+            <AlertTriangle class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p class="text-sm text-amber-800 dark:text-amber-300">{{ lanError }}</p>
+              <p class="text-xs text-amber-600 dark:text-amber-500 mt-1">Alternatif: <strong>lan-yapilandir.bat</strong> dosyasını sağ tıklayıp "Yönetici olarak çalıştır" seçin.</p>
+            </div>
+          </div>
+          <button @click="enableLan" :disabled="lanStatus === 'loading'"
+            class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-semibold transition-colors shadow-sm">
+            <Wifi class="w-4 h-4" />
+            {{ lanStatus === 'loading' ? 'Etkinleştiriliyor...' : 'LAN Erişimini Etkinleştir' }}
+          </button>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mt-2">Güvenlik duvarında port 3000 açılır. Yönetici yetkisi gerekebilir.</p>
+        </div>
+
+        <div v-else class="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+          <CheckCircle2 class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <div>
+            <p class="text-sm font-semibold text-emerald-800 dark:text-emerald-300">LAN erişimi aktif!</p>
+            <p class="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Diğer bilgisayarlar <strong>http://{{ networkInfo.lanIP }}:3000</strong> adresini kullanabilir.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Kullanicilar Yonetimi -->
     <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
       <div class="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
         <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">

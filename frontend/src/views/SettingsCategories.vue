@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { FolderKanban, Trash2, Edit2, GripVertical, Check, X } from 'lucide-vue-next'
 import draggable from 'vuedraggable'
 import { authState } from '../auth'
 import { useToast } from '../composables/useToast'
+import { apiUrl } from '../api'
 
 const { success, error: toastError } = useToast()
 
-const categories = ref([])
-const nestedCategories = ref([])
-const newCategory = ref({ name: '', parentId: null })
+const categories = ref<any[]>([])
+const nestedCategories = ref<any[]>([])
+const newCategory = ref({ name: '', parentId: null as number | null })
 
 const editingId = ref(null)
 const editingName = ref('')
 
 const fetchSettingsData = async () => {
   const headers = { 'Authorization': `Bearer ${authState.token}` }
-  const cRes = await fetch('http://localhost:3000/api/categories', { headers })
+  const cRes = await fetch(apiUrl('/api/categories'), { headers })
   if (cRes.ok) {
     const raw = await cRes.json()
     categories.value = raw
@@ -31,7 +32,7 @@ const fetchSettingsData = async () => {
 
 const addCategory = async () => {
   if (!newCategory.value.name) return
-  const res = await fetch('http://localhost:3000/api/categories', {
+  const res = await fetch(apiUrl('/api/categories'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify(newCategory.value)
@@ -48,7 +49,7 @@ const addCategory = async () => {
 
 const deleteCategory = async (id: number) => {
   if(!confirm('Bu kategoriyi silmek istediğinize emin misiniz?')) return
-  const res = await fetch(`http://localhost:3000/api/categories/${id}`, {
+  const res = await fetch(apiUrl(`/api/categories/${id}`), {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${authState.token}` }
   })
@@ -73,7 +74,7 @@ const saveEdit = async (cat: any) => {
     cancelEdit()
     return
   }
-  const res = await fetch(`http://localhost:3000/api/categories/${cat.id}`, {
+  const res = await fetch(apiUrl(`/api/categories/${cat.id}`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify({ name: editingName.value })
@@ -98,7 +99,7 @@ const onDragEnd = async () => {
     }
   })
   
-  const res = await fetch('http://localhost:3000/api/categories/reorder', {
+  const res = await fetch(apiUrl('/api/categories/reorder'), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify({ categories: flatArray })

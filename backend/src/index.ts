@@ -14,9 +14,37 @@ const prisma = new PrismaClient();
 const port = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_asm_key';
 
-app.use(cors());
+// CORS Ayarı: Local (Senaryo 1) + LAN (Senaryo 2) desteği
+// Senaryo 4 (VPS)'de nginx aynı domain'den serve ettiği için CORS gerekmez
+const allowedOrigins = [
+  /^http:\/\/localhost(:\d+)?$/,          // Local dev
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,      // Local IP
+  /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/, // LAN (192.168.x.x)
+  /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,  // LAN (10.x.x.x)
+  /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$/, // LAN (172.16-31.x.x)
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., mobile apps, Postman, same-origin)
+    if (!origin) return callback(null, true);
+    const isAllowed = allowedOrigins.some(pattern => pattern.test(origin));
+    if (isAllowed) return callback(null, true);
+    return callback(new Error(`CORS: ${origin} adresine izin verilmiyor.`));
+  },
+  credentials: true
+}));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Senaryo 1 & 2: Production modda frontend'i backend'den serve et
+// Frontend build: cd frontend && npm run build → frontend/dist/ klasörüne çıkar
+// Backend bu klasörü statik olarak sunar, böylece tek port (3000) yeterli olur
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendDist));
+  // Not: SPA fallback aşağıda tüm API rotalarından SONRA ekleniyor
+}
 
 // --- MULTER SETUP ---
 const storage = multer.diskStorage({
@@ -64,6 +92,56 @@ app.get('/api/auth/status', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Veritabanı hatası' });
   }
+});
+
+// Kurulum sihirbazı için ağ IP bilgisi
+app.get('/api/auth/network-info', (req, res) => {
+  const os = require('os');
+  const interfaces = os.networkInterfaces();
+  let lanIP = '';
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of (interfaces[name] || [])) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        lanIP = iface.address;
+        break;
+      }
+    }
+    if (lanIP) break;
+  }
+  res.json({ localIP: 'localhost', lanIP });
+});
+
+// LAN erişimini etkinleştir: Windows Güvenlik Duvarı kuralı ekle
+app.post('/api/admin/lan-enable', authenticateToken, async (req: any, res: any) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Yetkisiz.' });
+
+  const { exec } = require('child_process');
+  const os = require('os');
+
+  // Mevcut LAN IP'sini bul
+  const interfaces = os.networkInterfaces();
+  let lanIP = '';
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of (interfaces[name] || [])) {
+      if (iface.family === 'IPv4' && !iface.internal) { lanIP = iface.address; break; }
+    }
+    if (lanIP) break;
+  }
+
+  // Güvenlik duvarı kuralı ekle
+  const cmd = `netsh advfirewall firewall delete rule name="ASM Gider Takip" >nul 2>&1 & netsh advfirewall firewall add rule name="ASM Gider Takip" dir=in action=allow protocol=TCP localport=${process.env.PORT || 3000}`;
+
+  exec(cmd, (error: any) => {
+    if (error) {
+      // Yönetici yetkisi yoksa hata döner
+      return res.status(500).json({
+        success: false,
+        error: 'Güvenlik duvarı kuralı eklenemedi. Uygulamayı yönetici olarak çalıştırın veya lan-yapilandir.bat kullanın.',
+        lanIP
+      });
+    }
+    res.json({ success: true, lanIP, port: process.env.PORT || 3000, url: `http://${lanIP}:${process.env.PORT || 3000}` });
+  });
 });
 
 app.post('/api/auth/setup', async (req: any, res: any) => {
@@ -370,12 +448,10 @@ app.get('/api/expenses', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-app.post('/api/upload', authenticateToken, upload.single('receipt'), (req: any, res: any) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'Dosya yüklenemedi.' });
-  }
-  const fileUrl = `/uploads/${req.file.filename}`;
-  res.json({ url: fileUrl });
+// Dosya yükleme özelliği geçici olarak devre dışı bırakıldı
+// İleride Supabase Storage veya S3 ile yeniden aktive edilecek
+app.post('/api/upload', authenticateToken, (req: any, res: any) => {
+  res.status(503).json({ error: 'Dosya yükleme özelliği geçici olarak devre dışıdır.' });
 });
 
 app.post('/api/expenses', authenticateToken, async (req: any, res: any) => {
@@ -521,6 +597,38 @@ app.put('/api/expenses/:id', authenticateToken, async (req: any, res: any) => {
 
 
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+// SPA Fallback: Production modda Vue Router için tüm bilinmeyen route'ları index.html'e yönlendir
+// app.use ile yapıyoruz çünkü Express v5 wildcard syntax'ı değişti
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '../../frontend/dist');
+  app.use((req: any, res: any, next: any) => {
+    // API ve uploads yollarını geç
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
+
+app.listen(port, '0.0.0.0', () => {
+  const os = require('os');
+  const interfaces = os.networkInterfaces();
+  let lanIP = '';
+  
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        lanIP = iface.address;
+        break;
+      }
+    }
+    if (lanIP) break;
+  }
+  
+  console.log('\n========================================');
+  console.log('  ASM Gider Takip Sistemi Başladı!');
+  console.log('========================================');
+  console.log(`  Yerel Erişim:  http://localhost:${port}`);
+  if (lanIP) {
+    console.log(`  Ağ Erişimi:    http://${lanIP}:${port}`);
+  }
+  console.log('========================================\n');
 });

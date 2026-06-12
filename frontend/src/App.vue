@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { LayoutDashboard, Settings, LogOut, UserCircle, FileText, Sun, Moon, Table, Menu, PlusCircle, List, Users, FolderKanban } from 'lucide-vue-next'
+import { LayoutDashboard, LogOut, UserCircle, FileText, Sun, Moon, Table, Menu, PlusCircle, List, Users, FolderKanban } from 'lucide-vue-next'
 import { RouterView, RouterLink, useRoute, useRouter } from 'vue-router'
 import { authState, clearAuth } from './auth'
 import { isDark, toggleTheme } from './theme'
 import ToastProvider from './components/ToastProvider.vue'
-import { ref, watch, computed } from 'vue'
+import { ref, computed } from 'vue'
 
 const route = useRoute()
 const router = useRouter()

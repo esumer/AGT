@@ -1,10 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
-import Settings from '../views/Settings.vue'
 import Login from '../views/Login.vue'
 import Setup from '../views/Setup.vue'
-import Reports from '../views/Reports.vue'
 import { authState } from '../auth'
+import { apiUrl } from '../api'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -29,11 +28,11 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach(async (to, from) => {
+router.beforeEach(async (to, _from) => {
   // Check if system is setup
   if (to.name !== 'setup') {
     try {
-      const res = await fetch('http://localhost:3000/api/auth/status')
+      const res = await fetch(apiUrl('/api/auth/status'))
       const data = await res.json()
       if (!data.isSetupComplete) {
         return { name: 'setup' }

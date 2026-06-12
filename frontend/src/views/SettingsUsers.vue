@@ -1,20 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Settings2, Users, FolderKanban, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import { Users, Trash2 } from 'lucide-vue-next'
 import { authState } from '../auth'
 import { useToast } from '../composables/useToast'
+import { apiUrl } from '../api'
 
 const { success, error: toastError } = useToast()
 
-const users = ref([])
-const categories = ref([])
-
+const users = ref<any[]>([])
 const newUser = ref({ name: '', email: '', password: '', role: 'USER', title: 'DOKTOR', isPartner: true, startDate: '' })
-const newCategory = ref({ name: '' })
 
 const fetchSettingsData = async () => {
   const headers = { 'Authorization': `Bearer ${authState.token}` }
-  const uRes = await fetch('http://localhost:3000/api/users', { headers })
+  const uRes = await fetch(apiUrl('/api/users'), { headers })
   if (uRes.ok) {
     const rawUsers = await uRes.json()
     users.value = rawUsers.map((u: any) => ({
@@ -27,7 +25,7 @@ const fetchSettingsData = async () => {
 const addUser = async () => {
   if (!newUser.value.name || !newUser.value.email || !newUser.value.password) return toastError('Tüm alanları doldurun')
   
-  const res = await fetch('http://localhost:3000/api/users', {
+  const res = await fetch(apiUrl('/api/users'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify(newUser.value)
@@ -48,7 +46,7 @@ const updateUser = async (user: any) => {
     return;
   }
   
-  const res = await fetch(`http://localhost:3000/api/users/${user.id}`, {
+  const res = await fetch(apiUrl(`/api/users/${user.id}`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authState.token}` },
     body: JSON.stringify({ role: user.role, title: user.title, isPartner: user.isPartner, startDate: user.startDate })
@@ -63,7 +61,7 @@ const updateUser = async (user: any) => {
 
 const deleteUser = async (id: number) => {
   if(!confirm('Bu kullanıcıyı silmek istediğinize emin misiniz?')) return
-  const res = await fetch(`http://localhost:3000/api/users/${id}`, {
+  const res = await fetch(apiUrl(`/api/users/${id}`), {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${authState.token}` }
   })
