@@ -29,18 +29,13 @@ if not exist "%~dp0frontend\dist\index.html" (
     echo [OK] Derleme tamamlandi.
 )
 
-REM Port 3000 kontrolu - zaten kullanimda mi?
-netstat -ano | findstr ":3000 " >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [UYARI] Port 3000 baska bir program tarafindan kullaniliyor.
-    echo         Program zaten calisiyor olabilir.
-    echo.
-    echo Tarayicinizda acin: http://localhost:3000
-    echo.
-    echo Eger program calismiyorsa, bilgisayari yeniden baslatip tekrar deneyin.
-    pause
-    exit /b 0
+REM ---- Port 3000'i temizle (eski process varsa kapat) ----
+echo Port 3000 kontrol ediliyor...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000 " 2^>nul') do (
+    echo   Eski process kapatiliyor: PID %%a
+    taskkill /PID %%a /F >nul 2>&1
 )
+timeout /t 1 >nul
 
 REM Backend klasorune gec
 cd /d "%~dp0backend"
@@ -65,7 +60,7 @@ echo.
 set NODE_ENV=production
 call npm run start
 
-REM Eger buraya gelindiyse npm start hata verdi
+REM Buraya gelindiyse npm start hata verdi
 echo.
 echo ==========================================
 echo [HATA] Sunucu beklenmedik sekilde kapandi!
