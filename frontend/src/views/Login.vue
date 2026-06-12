@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { KeyRound } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { LogIn } from 'lucide-vue-next'
+import { setAuth } from '../auth'
 
 const router = useRouter()
 const form = ref({ email: '', password: '' })
