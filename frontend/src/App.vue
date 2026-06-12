@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LayoutDashboard, LogOut, UserCircle, FileText, Sun, Moon, Table, Menu, PlusCircle, List, Users, FolderKanban } from 'lucide-vue-next'
+import { LayoutDashboard, LogOut, UserCircle, FileText, Sun, Moon, Table, Menu, PlusCircle, List, Users, FolderKanban, Settings } from 'lucide-vue-next'
 import { RouterView, RouterLink, useRoute, useRouter } from 'vue-router'
 import { authState, clearAuth } from './auth'
 import { isDark, toggleTheme } from './theme'
@@ -37,6 +37,7 @@ const pageTitle = computed(() => {
     case '/yearly-report': return 'Hesap Tablosu';
     case '/users': return 'Personel Yönetimi';
     case '/categories': return 'Kategoriler';
+    case '/settings': return 'Ayarlar';
     default: return 'ASM Gider Takip';
   }
 })
@@ -132,6 +133,16 @@ const pageTitle = computed(() => {
         >
           <FolderKanban class="w-5 h-5 shrink-0 transition-transform duration-500 group-hover:scale-110" :class="isSidebarCollapsed ? 'scale-110' : ''" />
           <span class="text-sm whitespace-nowrap transition-all duration-500 ease-in-out overflow-hidden" :class="isSidebarCollapsed ? 'opacity-0 max-w-0 ml-0' : 'opacity-100 max-w-[200px] ml-3'">Kategoriler</span>
+        </RouterLink>
+
+        <RouterLink v-if="authState.user?.role === 'ADMIN'"
+          to="/settings" 
+          class="flex items-center h-11 rounded-lg transition-all duration-500 ease-in-out group"
+          :class="[route.path === '/settings' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50', isSidebarCollapsed ? 'pl-[18px]' : 'pl-3']"
+          title="Ayarlar"
+        >
+          <Settings class="w-5 h-5 shrink-0 transition-transform duration-500 group-hover:scale-110" :class="isSidebarCollapsed ? 'scale-110' : ''" />
+          <span class="text-sm whitespace-nowrap transition-all duration-500 ease-in-out overflow-hidden" :class="isSidebarCollapsed ? 'opacity-0 max-w-0 ml-0' : 'opacity-100 max-w-[200px] ml-3'">Ayarlar</span>
         </RouterLink>
       </nav>
       
