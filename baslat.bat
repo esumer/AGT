@@ -31,9 +31,11 @@ if not exist "%~dp0frontend\dist\index.html" (
 
 REM ---- Port 3000'i temizle (eski process varsa kapat) ----
 echo Port 3000 kontrol ediliyor...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000 " 2^>nul') do (
-    echo   Eski process kapatiliyor: PID %%a
-    taskkill /PID %%a /F >nul 2>&1
+for /f "skip=4 tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr "TCP.*:3000 "') do (
+    if not "%%a"=="0" if not "%%a"=="" (
+        echo   Eski process kapatiliyor: PID %%a
+        taskkill /PID %%a /F >nul 2>&1
+    )
 )
 timeout /t 1 >nul
 
