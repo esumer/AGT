@@ -1,0 +1,5 @@
+# AI Assistant & Git Rules
+
+- Tüm Git commit mesajlarını **Türkçe** ve **tek cümle** olarak yazın. (Örnek: "Gider kalemleri özeti tablosundaki kategoriler hiyerarşik olarak sıralandı.")
+- Mesajlar net, kısa ve yapılan ana değişikliği özetleyecek nitelikte olmalıdır.
+- Kod açıklamalarında ve kullanıcıyla olan iletişimde Türkçe dil kurallarına uyun.
